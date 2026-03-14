@@ -444,19 +444,28 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "or tap /start to open the main menu.",
     )
 
-
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("about", about_command))
-app.add_handler(CommandHandler("remind", remind))
-app.add_handler(CommandHandler("list", list_reminders))
-app.add_handler(CommandHandler("delete", delete))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.COMMAND, unknown))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-
 if __name__ == "__main__":
+    from app.apscheduler.apscheduler_config import start_scheduler
+
+    async def post_init(application):
+        start_scheduler(bot=application.bot)
+
+    app = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("about", about_command))
+    app.add_handler(CommandHandler("remind", remind))
+    app.add_handler(CommandHandler("list", list_reminders))
+    app.add_handler(CommandHandler("delete", delete))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.COMMAND, unknown))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
     print("🤖 Bot is running...")
     app.run_polling()
