@@ -2,6 +2,7 @@ import os
 import re
 import logging
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
@@ -22,11 +23,10 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_MACHINE")
 
 DATETIME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 
 
-# ─────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────
+
 
 def main_menu_keyboard():
     return InlineKeyboardMarkup([
@@ -47,7 +47,8 @@ def main_menu_text(first_name: str, status_msg: str) -> str:
         f"{status_msg}\n\n"
         f"*RemindMe Bot* helps you set reminders right from Telegram.\n\n"
         f"📌 *Quick Usage:*\n"
-        f"`/remind Buy milk 2026-03-15T09:00:00`\n\n"
+        f"`/remind Buy milk 2026-03-15T09:00:00`\n"
+        f"_All times are in Nepal Time (NPT)_ 🇳🇵\n\n"
         f"Tap a button below to get started 👇"
     )
 
@@ -76,7 +77,8 @@ HELP_TEXT = (
     "❓ /help — Show this message\n\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
     "🕐 *Date format:* `YYYY-MM-DDTHH:MM:SS`\n"
-    "   Example: `2026-03-15T09:00:00`\n\n"
+    "   Example: `2026-03-15T09:00:00`\n"
+    "   🇳🇵 *All times are in Nepal Time (NPT)*\n\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
     "👨‍💻 *Created by* Umaan Banjara\n"
     "📧 umaanbanjara@gmail.com\n"
@@ -91,15 +93,14 @@ NEW_REMINDER_TEXT = (
     "✅ `/remind Call John 2026-03-15T09:00:00`\n"
     "✅ `/remind Buy groceries 2026-03-20T18:30:00`\n\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
+    "🇳🇵 All times are in *Nepal Time (NPT)*\n"
     "📅 Must be a *future* date and time\n"
     "⛔ Max *30 days* from today\n"
     "❌ Do NOT use quotes around the message"
 )
 
 
-# ─────────────────────────────────────────────
-# /start
-# ─────────────────────────────────────────────
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = str(update.message.from_user.id)
@@ -127,9 +128,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ─────────────────────────────────────────────
-# /help
-# ─────────────────────────────────────────────
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
@@ -145,9 +144,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.edit_text(HELP_TEXT, parse_mode="Markdown", reply_markup=keyboard)
 
 
-# ─────────────────────────────────────────────
-# /about
-# ─────────────────────────────────────────────
+
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
@@ -163,9 +160,6 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.edit_text(ABOUT_TEXT, parse_mode="Markdown", reply_markup=keyboard)
 
 
-# ─────────────────────────────────────────────
-# /remind
-# ─────────────────────────────────────────────
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = str(update.message.from_user.id)
@@ -175,6 +169,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Correct:* `/remind <message> <YYYY-MM-DDTHH:MM:SS>`\n\n"
         "✅ `/remind Call John 2026-03-15T09:00:00`\n"
         "✅ `/remind Buy groceries 2026-03-20T18:30:00`\n\n"
+        "🇳🇵 All times are in *Nepal Time (NPT)*\n"
         "❌ Do NOT use quotes around the message\n"
         "❌ Date must be last, in format: `2026-03-15T09:00:00`"
     )
@@ -183,12 +178,10 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(USAGE, parse_mode="Markdown")
         return
 
-    # Strip quotes from all args
     args = [a.strip('"\'') for a in context.args]
     scheduled_time = args[-1]
     message = " ".join(args[:-1]).strip()
 
-    # Validate datetime format
     if not DATETIME_PATTERN.match(scheduled_time):
         await update.message.reply_text(
             f"❌ *Invalid date format!*\n\n"
@@ -203,12 +196,9 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(USAGE, parse_mode="Markdown")
         return
 
-    # Validate date range
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    max_allowed = now + timedelta(days=30)
-
     try:
-        reminder_dt = datetime.strptime(scheduled_time, "%Y-%m-%dT%H:%M:%S")
+        reminder_dt_nepal = datetime.strptime(scheduled_time, "%Y-%m-%dT%H:%M:%S")
+        reminder_dt_nepal = reminder_dt_nepal.replace(tzinfo=NEPAL_TZ)
     except ValueError:
         await update.message.reply_text(
             "❌ *Could not parse the date.* Use format: `2026-03-15T09:00:00`",
@@ -216,31 +206,39 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if reminder_dt <= now:
+    reminder_dt_utc = reminder_dt_nepal.astimezone(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    max_allowed_utc = now_utc + timedelta(days=30)
+
+    if reminder_dt_utc <= now_utc:
+        now_nepal = now_utc.astimezone(NEPAL_TZ)
         await update.message.reply_text(
             f"❌ *That time has already passed!*\n\n"
-            f"You entered: `{scheduled_time}`\n"
-            f"Current time: `{now.strftime('%Y-%m-%dT%H:%M:%S')}`\n\n"
+            f"You entered: `{scheduled_time}` 🇳🇵\n"
+            f"Current Nepal time: `{now_nepal.strftime('%Y-%m-%dT%H:%M:%S')}`\n\n"
             f"⏩ Please choose a future date and time.",
             parse_mode="Markdown"
         )
         return
 
-    if reminder_dt > max_allowed:
+    if reminder_dt_utc > max_allowed_utc:
+        max_nepal = max_allowed_utc.astimezone(NEPAL_TZ)
         await update.message.reply_text(
             f"❌ *Too far in the future!*\n\n"
-            f"You entered: `{scheduled_time}`\n"
-            f"Maximum allowed: `{max_allowed.strftime('%Y-%m-%dT%H:%M:%S')}`\n\n"
+            f"You entered: `{scheduled_time}` 🇳🇵\n"
+            f"Maximum allowed: `{max_nepal.strftime('%Y-%m-%dT%H:%M:%S')}` 🇳🇵\n\n"
             f"📅 Reminders can only be set up to *30 days* from today.",
             parse_mode="Markdown"
         )
         return
 
+    scheduled_time_utc = reminder_dt_utc.strftime("%Y-%m-%dT%H:%M:%S")
+
     try:
         payload = {
             "telegram_id": telegram_id,
             "message": message,
-            "scheduled_time": scheduled_time
+            "scheduled_time": scheduled_time_utc
         }
         response = requests.post(f"{API_URL}/reminder/create", json=payload, timeout=10)
 
@@ -250,7 +248,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ *Reminder Created!*\n\n"
                 f"🆔 ID: `{data['id']}`\n"
                 f"📝 Message: `{message}`\n"
-                f"🕐 Time: `{scheduled_time}`\n\n"
+                f"🕐 Time: `{scheduled_time}` 🇳🇵\n\n"
                 f"_Use /delete `{data['id']}` to remove it._",
                 parse_mode="Markdown"
             )
@@ -259,7 +257,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ *Duplicate Reminder!*\n\n"
                 f"You already have this reminder scheduled:\n"
                 f"📝 `{message}`\n"
-                f"🕐 `{scheduled_time}`\n\n"
+                f"🕐 `{scheduled_time}` 🇳🇵\n\n"
                 f"Use /list to see all your reminders.",
                 parse_mode="Markdown"
             )
@@ -274,9 +272,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Could not reach the server. Try again later.")
 
 
-# ─────────────────────────────────────────────
-# /list
-# ─────────────────────────────────────────────
+
 
 async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
@@ -300,7 +296,8 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "Example: `/remind Call John 2026-03-15T09:00:00`"
                 )
             else:
-                msg = f"📋 *Your Reminders* ({len(reminders)} total)\n\n"
+                msg = f"📋 *Your Reminders* ({len(reminders)} total)\n"
+                msg += "_All times in Nepal Time 🇳🇵_\n\n"
                 for r in reminders:
                     status = "✅ Sent" if r['is_sent'] else "⏳ Pending"
                     msg += (
@@ -333,9 +330,7 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.edit_text(msg, parse_mode="Markdown", reply_markup=keyboard)
 
 
-# ─────────────────────────────────────────────
-# /delete
-# ─────────────────────────────────────────────
+
 
 async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = str(update.message.from_user.id)
@@ -376,9 +371,7 @@ async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Could not reach the server. Try again later.")
 
 
-# ─────────────────────────────────────────────
-# BUTTON HANDLER
-# ─────────────────────────────────────────────
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -407,14 +400,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# ─────────────────────────────────────────────
-# UNKNOWN COMMAND HANDLER
-# ─────────────────────────────────────────────
+
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❓ Unknown command. Use /help to see all available commands."
     )
+
+
+
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -422,9 +416,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use /help to see all available commands\n"
         "or tap /start to open the main menu.",
     )
-# ─────────────────────────────────────────────
-# APP
-# ─────────────────────────────────────────────
+
+
+
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
