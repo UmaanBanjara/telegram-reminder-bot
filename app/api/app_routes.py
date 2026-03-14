@@ -1,0 +1,97 @@
+from fastapi import APIRouter , HTTPException
+from sqlalchemy import select
+from app.models.app_models import Users , Remainder
+from app.utils.app_validations import CreateRemainder , ListRemainder , DeleteRemainder
+from app.database.connection_config import mysession
+
+router = APIRouter()
+
+@router.post('/create', status_code=201)
+async def create_reminder(data: CreateRemainder):
+    async with mysession() as session:
+        user_check = await session.execute(select(Users).where(Users.telegram_id == data.telegram_id))
+        user_check = user_check.scalar_one_or_none()
+        if not user_check:
+            raise HTTPException(status_code=404, detail='User not found')
+
+        new_reminder = Remainder(
+            user_id=user_check.id,
+            message=data.message,
+            scheduled_time=data.scheduled_time
+        )
+
+        session.add(new_reminder)
+        await session.commit()
+        await session.refresh(new_reminder)
+
+        return {
+            "id": new_reminder.id,
+            "message": new_reminder.message,
+            "scheduled_time": new_reminder.scheduled_time,
+            "is_sent": new_reminder.is_sent
+        } 
+
+@router.post('/list', status_code=200)
+async def list_reminders(data: ListRemainder):
+    async with mysession() as session:
+
+        user = await session.execute(select(Users).where(Users.telegram_id == data.telegram_id))
+        user = user.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail='User not found')
+
+        reminders = await session.execute(select(Remainder).where(Remainder.user_id == user.id))
+        reminders = reminders.scalars().all()
+
+        return [
+            {
+                "id": r.id,
+                "message": r.message,
+                "scheduled_time": r.scheduled_time,
+                "is_sent": r.is_sent,
+                "sent_at": r.sent_at
+            }
+            for r in reminders
+        ]
+
+@router.post('/delete', status_code=200)
+async def delete_reminder(data: DeleteRemainder):
+    async with mysession() as session:
+
+        user = await session.execute(select(Users).where(Users.telegram_id == data.telegram_id))
+        user = user.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail='User not found')
+
+        reminder = await session.execute(
+            select(Remainder).where(Remainder.id == data.remainder_id, Remainder.user_id == user.id)
+        )
+        reminder = reminder.scalar_one_or_none()
+        if not reminder:
+            raise HTTPException(status_code=404, detail='Reminder not found')
+
+        await session.delete(reminder)
+        await session.commit()
+
+        return {"detail": "Reminder deleted successfully"}
+
+
+@router.post('/user/create', status_code=201)
+async def create_user(telegram_id: str):
+    async with mysession() as session:
+        
+        existing_user = await session.execute(select(Users).where(Users.telegram_id == telegram_id))
+        existing_user = existing_user.scalar_one_or_none()
+        if existing_user:
+            raise HTTPException(status_code=400, detail='User already exists')
+
+        new_user = Users(telegram_id=telegram_id)
+        session.add(new_user)
+        await session.commit()
+        await session.refresh(new_user)
+
+        return {
+            "id": new_user.id,
+            "telegram_id": new_user.telegram_id,
+            "created_at": new_user.created_at
+        }
