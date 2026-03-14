@@ -16,6 +16,4 @@ app.include_router(router, prefix='/api', tags=['API'])
 
 @app.get('/')
 def root():
-    return {
-        'message': 'Welcome to RemindMe Bot'
-    }
+    return {"message": "Welcome to RemindMe Bot"}
