@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
+from datetime import timezone
+from zoneinfo import ZoneInfo
 from app.models.app_models import Users, Remainder
 from app.utils.app_validations import CreateRemainder, ListRemainder, DeleteRemainder, CreateUser
 from app.database.connection_config import mysession
 
 router = APIRouter()
+NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 
 
 @router.post('/user/create', status_code=201)
@@ -83,9 +86,13 @@ async def list_reminders(data: ListRemainder):
             {
                 "id": r.id,
                 "message": r.message,
-                "scheduled_time": r.scheduled_time,
+                "scheduled_time": r.scheduled_time.replace(tzinfo=timezone.utc)
+                                   .astimezone(NEPAL_TZ)
+                                   .strftime("%Y-%m-%dT%H:%M:%S"),
                 "is_sent": r.is_sent,
-                "sent_at": r.sent_at
+                "sent_at": r.sent_at.replace(tzinfo=timezone.utc)
+                            .astimezone(NEPAL_TZ)
+                            .strftime("%Y-%m-%dT%H:%M:%S") if r.sent_at else None
             } for r in reminders
         ]
 
