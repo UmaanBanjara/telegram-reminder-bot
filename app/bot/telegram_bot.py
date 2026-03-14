@@ -116,6 +116,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             status_msg = "✅ You have been registered!"
         elif response.status_code == 400:
             status_msg = "👋 Welcome back!"
+        elif response.status_code == 429:
+            status_msg = "⚠️ Too many requests. Please wait a moment."
         else:
             status_msg = "⚠️ Something went wrong. Try again later."
     except requests.exceptions.RequestException:
@@ -261,16 +263,28 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Use /list to see all your reminders.",
                 parse_mode="Markdown"
             )
+        elif response.status_code == 429:
+            await update.message.reply_text(
+                "⚠️ *Too many requests!*\n\n"
+                "You are sending too fast.\n"
+                "Please wait a minute and try again. ⏳",
+                parse_mode="Markdown"
+            )
         elif response.status_code == 404:
-            await update.message.reply_text("❌ User not found. Please send /start first.")
+            await update.message.reply_text(
+                "❌ User not found. Please send /start first."
+            )
         else:
             logger.error(f"Reminder create error: {response.status_code} {response.text}")
-            await update.message.reply_text("❌ Failed to create reminder. Try again.")
+            await update.message.reply_text(
+                f"❌ *Failed to create reminder.*\n\n"
+                f"Error `{response.status_code}` — Try again later.",
+                parse_mode="Markdown"
+            )
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Request failed: {e}")
         await update.message.reply_text("❌ Could not reach the server. Try again later.")
-
 
 
 
@@ -307,11 +321,17 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 msg += "_Use /delete `<id>` to remove a reminder._"
 
+        elif response.status_code == 429:
+            msg = (
+                "⚠️ *Too many requests!*\n\n"
+                "You are sending too fast.\n"
+                "Please wait a minute and try again. ⏳"
+            )
         elif response.status_code == 404:
             msg = "❌ User not found. Please send /start first."
         else:
             logger.error(f"List error: {response.status_code} {response.text}")
-            msg = "❌ Could not fetch reminders. Try again."
+            msg = f"❌ *Failed to fetch reminders.*\n\nError `{response.status_code}` — Try again later."
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Request failed: {e}")
@@ -328,7 +348,6 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=keyboard)
     elif update.callback_query:
         await update.callback_query.message.edit_text(msg, parse_mode="Markdown", reply_markup=keyboard)
-
 
 
 
@@ -356,6 +375,13 @@ async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Use /list to see remaining reminders.",
                 parse_mode="Markdown"
             )
+        elif response.status_code == 429:
+            await update.message.reply_text(
+                "⚠️ *Too many requests!*\n\n"
+                "You are sending too fast.\n"
+                "Please wait a minute and try again. ⏳",
+                parse_mode="Markdown"
+            )
         elif response.status_code == 404:
             await update.message.reply_text(
                 f"❌ Reminder `#{reminder_id}` not found.\n"
@@ -364,12 +390,15 @@ async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             logger.error(f"Delete error: {response.status_code} {response.text}")
-            await update.message.reply_text("❌ Failed to delete. Try again.")
+            await update.message.reply_text(
+                f"❌ *Failed to delete reminder.*\n\n"
+                f"Error `{response.status_code}` — Try again later.",
+                parse_mode="Markdown"
+            )
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Request failed: {e}")
         await update.message.reply_text("❌ Could not reach the server. Try again later.")
-
 
 
 
@@ -401,12 +430,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❓ Unknown command. Use /help to see all available commands."
     )
-
 
 
 
@@ -416,8 +443,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use /help to see all available commands\n"
         "or tap /start to open the main menu.",
     )
-
-
 
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
