@@ -1,6 +1,9 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+class CreateUser(BaseModel):
+    telegram_id: str
+
 class CreateRemainder(BaseModel):
     telegram_id : str
     message : str
