@@ -1,17 +1,19 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from datetime import timezone
 from zoneinfo import ZoneInfo
 from app.models.app_models import Users, Remainder
 from app.utils.app_validations import CreateRemainder, ListRemainder, DeleteRemainder, CreateUser
 from app.database.connection_config import mysession
+from app.redis.redis_config import limiter
 
 router = APIRouter()
 NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 
 
 @router.post('/user/create', status_code=201)
-async def create_user(data: CreateUser):
+@limiter.limit("5/minute")
+async def create_user(request: Request, data: CreateUser):
     async with mysession() as session:
         existing_user = await session.execute(
             select(Users).where(Users.telegram_id == data.telegram_id)
@@ -32,7 +34,8 @@ async def create_user(data: CreateUser):
 
 
 @router.post('/reminder/create', status_code=201)
-async def create_reminder(data: CreateRemainder):
+@limiter.limit("5/minute")
+async def create_reminder(request: Request, data: CreateRemainder):
     async with mysession() as session:
         user_check = await session.execute(
             select(Users).where(Users.telegram_id == data.telegram_id)
@@ -69,7 +72,8 @@ async def create_reminder(data: CreateRemainder):
 
 
 @router.post('/reminder/list', status_code=200)
-async def list_reminders(data: ListRemainder):
+@limiter.limit("5/minute")
+async def list_reminders(request: Request, data: ListRemainder):
     async with mysession() as session:
         user = await session.execute(
             select(Users).where(Users.telegram_id == data.telegram_id)
@@ -98,7 +102,8 @@ async def list_reminders(data: ListRemainder):
 
 
 @router.post('/reminder/delete', status_code=200)
-async def delete_reminder(data: DeleteRemainder):
+@limiter.limit("5/minute")
+async def delete_reminder(request: Request, data: DeleteRemainder):
     async with mysession() as session:
         user = await session.execute(
             select(Users).where(Users.telegram_id == data.telegram_id)
